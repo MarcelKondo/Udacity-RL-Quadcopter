@@ -22,13 +22,27 @@ class Task():
         self.action_low = 0
         self.action_high = 900
         self.action_size = 4
+        
 
         # Goal
         self.target_pos = target_pos if target_pos is not None else np.array([0., 0., 10.]) 
 
     def get_reward(self):
         """Uses current pose of sim to return reward."""
-        reward = 1.-.3*(abs(self.sim.pose[:3] - self.target_pos)).sum()
+        self.dimension_weights = np.array([1, 1., 0.]) #weights for each velocity axis (wieght of z is set to zero as to not penalize upwards velocities)
+        vel_vector = self.sim.v 
+        distance = np.multiply(vel_vector, self.dimension_weights)/np.linalg.norm(self.dimension_weights) #scale velocities according to weights
+        
+        reward = 2*(1 - np.tanh(np.linalg.norm(2*distance))**2)-1 #reward function corresponding to a slightly modified derivative of tanh()
+                                                                  #returns 1 when in zero, and decays to -1 on both infinities
+                                                                  #this alongside the velocity weights, aims to reduce movement on the x-y plane
+        reward = reward/3
+        reward += (np.clip(self.sim.v[2], -5, 5)/5)*2/3
+
+        # Penalize if the quadcopter crashes
+        if self.sim.done and self.sim.runtime > self.sim.time:
+            reward = -10
+        
         return reward
 
     def step(self, rotor_speeds):
